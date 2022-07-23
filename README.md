@@ -10,27 +10,31 @@ any kind of damage.
 ## Hardware
 
 Hardware needed:
-- Voltage regulator to 5V
+- Voltage regulator from about 12V to 5V
 - Level shifter 5V-3.3V
-- ESP32 based board (tested on Wemos Lolin D32 Pro)
+- ESP32 based board (tested on Wemos Lolin D32 Pro, ESP32-C3-DEVKITC-02, Wemos Lolin32 Lite)
 
 The A/C unit plug is as follow (at least on my unit, check yours before connecting anything):
 
 - TX, RX, +12V (unregulated), GND (TX and RX are 5V and won't work with 3.3.)
 
-Connect 12V and GND to the input of the voltage regulator
+Circuit:
 
-Connect TX and RX via the level shifter to pin GPIO_RX and GPIO_TX of the board (as defined below).
+- Connect 12V and GND to the input of the voltage regulator
+- Connect TX and RX via the level shifter to pin GPIO_RX and GPIO_TX of the board (as defined below).
+- Power the board (if it have a 5V power input) and the HV side of the level shifter with the output of the voltage regulator.
+- Power the LV side of the level shifter with the 3.3 pin of the ESP32 board.
 
-Power the board (if it have a 5V power input) and the HV side of the level shifter with the output of the voltage regulator.
+Here a couple of example boards:
 
-Power the LV side of the level shifter with the 3.3 pin of the ESP32 board.
+![example boards](https://raw.githubusercontent.com/msx80/FakeA41/main/IMG20220723171046.jpg)
 
 ## Installation
 
 - Flash the board with tasmota firmware for ESP32.
 - Setup tasmota as per standard (wifi, mqtt etc)
-- Go to the file manager, upload this script and rename it "autoexec.be" to have it run at every reboot.
+- Edit this Berry script so that GPIO_RX and GPIO_TX match your setup
+- Go to the file manager, upload the script and rename it "autoexec.be" to have it run at every reboot.
 
 ## Usage
 
