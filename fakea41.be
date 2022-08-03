@@ -10,8 +10,8 @@ Info at: https://github.com/msx80/FakeA41
 
 # Pins for software serial, adjust as needed
 
-GPIO_RX = 13
-GPIO_TX = 12
+GPIO_RX = 6
+GPIO_TX = 4
 
 
 # decoding table for JSON messages
@@ -34,7 +34,23 @@ FAN_CODES = {
 	'5': 0x37
 }
 
+
 import string
+
+#========= Utils
+
+def invertMap(map)
+  var res = {}
+  for i : map.keys()
+	res[map[i]]=i
+  end
+  return res;
+end
+
+
+MODE_CODES_INV = invertMap(MODE_CODES)
+FAN_CODES_INV = invertMap(FAN_CODES)
+
 
 #========= Checksum Functions
 
@@ -217,7 +233,17 @@ end
 def readUnitState(reader)
 	writePacket(reader, bytes("0246317703"))
 	var pkt = readReply(reader)
-	# TODO finish
+	
+	var active = pkt[3] == 0x31 ? true : false
+	var mode = MODE_CODES_INV[pkt[4]]
+	var temperature = (pkt[5]-28)/2
+	var fan = FAN_CODES_INV[pkt[6]]	
+	
+	return "\"active\":"+str(active)+
+			",\"mode\":\""+mode+"\"" +
+			",\"temperature\":"+str(temperature) +
+			",\"fan\":\""+fan+"\""
+	
 end
 
 def writeSwings(reader, swingV, swingH)
@@ -266,7 +292,8 @@ class FakeA41 : Driver
 	def json_append() 
 		var msg = 
 			",\"OutsideTemperature\":"+readOutsideTemperature(self.reader)+
-			",\"InsideTemperature\":"+readInsideTemperature(self.reader)
+			",\"InsideTemperature\":"+readInsideTemperature(self.reader)+
+			","+readUnitState(self.reader)
 		tasmota.response_append(msg)
 	end
 
@@ -303,6 +330,8 @@ class FakeA41 : Driver
 			writeCommand(self.reader, active, mode, temperature, fan)
 
 			tasmota.resp_cmnd_done()
+			
+			tasmota.set_timer(100, / -> tasmota.cmd('TelePeriod')) # run teleperiod to update the state to home automation
 		except .. as e, v
 			log("Error in Daikin cmd: "+str(e) + ' ' + str(v))
 			tasmota.resp_cmnd_str("ERR: "+str(e) + ' ' + str(v))
@@ -310,9 +339,9 @@ class FakeA41 : Driver
 	end
 end
 
+
 var fakeA41Driver = FakeA41()
 tasmota.add_driver(fakeA41Driver)
 tasmota.add_cmd("DaikinCtrl", / cmd idx payload payload_json -> fakeA41Driver.cmdControl(cmd, idx, payload, payload_json) )
 
 log("Daikin controller installed")
-
