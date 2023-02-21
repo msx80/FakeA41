@@ -258,7 +258,7 @@ def writeSwings(reader, swingV, swingH)
 		cmd[3] = 0x30
 	end
 
-	cmd[4] = (cmd[3] == 0x30) ? 0x30 : 0x37
+	cmd[4] = (cmd[3] == 0x30) ? 0x30 : 0x3F
 	writePacket(reader, cmd)
 	readAck(reader)
 end
