@@ -39,10 +39,10 @@ import string
 
 #========= Utils
 
-def invertMap(map)
+def invertMap(amap)
   var res = {}
-  for i : map.keys()
-	res[map[i]]=i
+  for i : amap.keys()
+	res[amap[i]]=i
   end
   return res;
 end
@@ -209,11 +209,11 @@ end
 def extractTemperature(pkt)
 	# es 025361 3035302B 7403
 	# es 025348 3030322B 5803
-	var str = pkt[3..6].asstring()
-	var res = str[2]+str[1]+"."+str[0]
+	var astr = pkt[3..6].asstring()
+	var res = astr[2]+astr[1]+"."+astr[0]
 	# only add sign if it's minus, json number can't start with +
-	if str[3] != '+'
-		res = str[3]+res
+	if astr[3] != '+'
+		res = astr[3]+res
 	end
 	return res
 end
