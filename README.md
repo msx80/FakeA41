@@ -14,6 +14,8 @@ Hardware needed:
 - Level shifter 5V-3.3V
 - ESP32 based board (tested on Wemos Lolin D32 Pro, ESP32-C3-DEVKITC-02, Wemos Lolin32 Lite)
 
+NB the unit has a 5V pin, but it doesn't seem to be able to supply enough current to run the ESP. See [this issue](https://github.com/msx80/FakeA41/issues/1).
+
 The A/C unit plug is as follow (at least on my unit, check yours before connecting anything):
 
 - TX, RX, +12V (unregulated), GND (TX and RX are 5V and won't work with 3.3.)
