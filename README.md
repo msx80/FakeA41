@@ -31,6 +31,11 @@ Here a couple of example boards:
 
 ![example boards](https://raw.githubusercontent.com/msx80/FakeA41/main/IMG20220723171046.jpg)
 
+Here's a smaller board with a Wemos S2 Mini:
+
+![image](https://user-images.githubusercontent.com/2278103/233312123-22bd5b00-5425-4796-8384-4b8d113d3a65.png)
+
+
 ## Installation
 
 - Flash the board with tasmota firmware for ESP32.
