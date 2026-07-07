@@ -8,11 +8,12 @@ Info at: https://github.com/msx80/FakeA41
 
 -#
 
+import string
+
 # Pins for software serial, adjust as needed
 
 GPIO_RX = 6
 GPIO_TX = 4
-
 
 # decoding table for JSON messages
 
@@ -34,8 +35,15 @@ FAN_CODES = {
 	'5': 0x37
 }
 
+class State
+	var active
+	var mode
+	var targetTemp
+	var fan
+	var insideTemp
+	var outsideTemp
+end
 
-import string
 
 #========= Utils
 
@@ -246,6 +254,24 @@ def readUnitState(reader)
 	
 end
 
+def readUnitStateObj(reader)
+	writePacket(reader, bytes("0246317703"))
+	var pkt = readReply(reader)
+	
+	var active = pkt[3] == 0x31 ? true : false
+	var mode = MODE_CODES_INV[pkt[4]]
+	var temperature = (pkt[5]-28)/2
+	var fan = FAN_CODES_INV[pkt[6]]	
+	
+	var res = State()
+	res.active = active
+	res.mode = mode
+	res.targetTemp = temperature
+	res.fan = fan
+	
+	return res;
+end
+
 def writeSwings(reader, swingV, swingH)
 	var cmd = bytes("024435FFFF30800003")
 	if swingV && swingH
@@ -276,10 +302,11 @@ def writeCommand(reader, active, mode, temperature, fan)
 end
 
 
+#====== Main interface classes
 
-#========= Main driver class
 
-class FakeA41 : Driver
+
+class FakeA41
 
 	var reader
 
@@ -287,21 +314,65 @@ class FakeA41 : Driver
 		var ser = serial(GPIO_RX, GPIO_TX, 2400, serial.SERIAL_8E2)
 		self.reader = SerReader(ser, 1000)
 	end
+	
+	def getState()
+		var outT = readOutsideTemperature(self.reader)
+		var inT = readInsideTemperature(self.reader)
+		var state = readUnitStateObj(self.reader)
+		state.insideTemp = inT
+		state.outsideTemp = outT
+		return state
+	end
+
+	# send a command to the unit.
+	# es: DaikinCtrl {"active":false, "mode":"COOL", "fan":"NIGHT", "temperature":20, "swingH":false, "swingV":false }
+	def command(active, mode, fan, targetTemp, swingH, swingV)
+		
+		# first set the swings so if anything goes bad the state is unchanged
+		# only send if turning on, no need to set if powering down
+		if active 
+			writeSwings(self.reader, swingV, swingH)
+		end
+
+		# write the actual command
+		writeCommand(self.reader, active, mode, targetTemp, fan)
+
+			
+	end
+end
+
+
+
+
+#========= Main driver class
+
+class FakeA41Driver : Driver
+
+	var fa41
+
+	def init()
+		self.fa41 = FakeA41()
+	end
 
 	# called by driver infrastructure
 	def json_append() 
+		var s = self.fa41.getState()
 		var msg = 
-			",\"OutsideTemperature\":"+readOutsideTemperature(self.reader)+
-			",\"InsideTemperature\":"+readInsideTemperature(self.reader)+
-			","+readUnitState(self.reader)
+			",\"OutsideTemperature\":"+s.outsideTemp+
+			",\"InsideTemperature\":"+s.insideTemp+
+			","+"\"active\":"+str(s.active)+
+			",\"mode\":\""+s.mode+"\"" +
+			",\"temperature\":"+str(s.targetTemp) +
+			",\"fan\":\""+s.fan+"\""
 		tasmota.response_append(msg)
 	end
 
 	# called by driver infrastructure
 	def web_sensor()
+		var s = self.fa41.getState()
 		var msg = 
-			"{s}Outside Temperature{m}"+readOutsideTemperature(self.reader)+" °C{e}"+
-			"{s}Inside Temperature{m}"+readInsideTemperature(self.reader)+" °C{e}"
+			"{s}Outside Temperature{m}"+s.outsideTemp+" °C{e}"+
+			"{s}Inside Temperature{m}"+s.insideTemp+" °C{e}"
 		tasmota.web_send_decimal(msg)
 	end
 
@@ -320,14 +391,7 @@ class FakeA41 : Driver
 			var swingV = j['swingV']
 			var swingH = j['swingH']
 
-			# first set the swings so if anything goes bad the state is unchanged
-			# only send if turning on, no need to set if powering down
-			if active 
-				writeSwings(self.reader, swingV, swingH)
-			end
-
-			# write the actual command
-			writeCommand(self.reader, active, mode, temperature, fan)
+			self.fa41.command(active, mode, fan, temperature, swingH, swingV)
 
 			tasmota.resp_cmnd_done()
 			
@@ -339,9 +403,10 @@ class FakeA41 : Driver
 	end
 end
 
-
-var fakeA41Driver = FakeA41()
+log("Daikin controller init")
+var fakeA41Driver = FakeA41Driver()
 tasmota.add_driver(fakeA41Driver)
 tasmota.add_cmd("DaikinCtrl", / cmd idx payload payload_json -> fakeA41Driver.cmdControl(cmd, idx, payload, payload_json) )
 
 log("Daikin controller installed")
+
