@@ -238,22 +238,6 @@ def readInsideTemperature(reader)
 	return extractTemperature(pkt)
 end
 
-def readUnitState(reader)
-	writePacket(reader, bytes("0246317703"))
-	var pkt = readReply(reader)
-	
-	var active = pkt[3] == 0x31 ? true : false
-	var mode = MODE_CODES_INV[pkt[4]]
-	var temperature = (pkt[5]-28)/2
-	var fan = FAN_CODES_INV[pkt[6]]	
-	
-	return "\"active\":"+str(active)+
-			",\"mode\":\""+mode+"\"" +
-			",\"temperature\":"+str(temperature) +
-			",\"fan\":\""+fan+"\""
-	
-end
-
 def readUnitStateObj(reader)
 	writePacket(reader, bytes("0246317703"))
 	var pkt = readReply(reader)
@@ -304,8 +288,6 @@ end
 
 #====== Main interface classes
 
-
-
 class FakeA41
 
 	var reader
@@ -325,7 +307,10 @@ class FakeA41
 	end
 
 	# send a command to the unit.
-	# es: DaikinCtrl {"active":false, "mode":"COOL", "fan":"NIGHT", "temperature":20, "swingH":false, "swingV":false }
+	# active boolean
+	# mode, fan string
+	# targetTemp number
+	# swing* boolean
 	def command(active, mode, fan, targetTemp, swingH, swingV)
 		
 		# first set the swings so if anything goes bad the state is unchanged
