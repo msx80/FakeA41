@@ -15,6 +15,7 @@ import string
 GPIO_RX = 6
 GPIO_TX = 4
 
+
 # decoding table for JSON messages
 
 MODE_CODES = {
@@ -42,6 +43,8 @@ class State
 	var fan
 	var insideTemp
 	var outsideTemp
+	var swingH
+	var swingV
 end
 
 
@@ -226,6 +229,41 @@ def extractTemperature(pkt)
 	return res
 end
 
+def readVersion(reader)
+	writePacket(reader, bytes("024638FF03"))
+	var pkt = readReply(reader)
+	# sample resp 02 47 38 30 32 30 30 4103
+	#                      0  2 0 0
+	return pkt[3..6].asstring()
+end
+
+def readSwingState(reader)
+	writePacket(reader, bytes("024635FF03"))
+	var pkt = readReply(reader)
+
+	# sample:
+	# Daiking Sending 0246357B03
+	# Daiking Receiving 024735313F30809C03
+	
+	# 02 4735 30303080 8C03 - None
+	# 02 4735 313F3080 9C03 - Vertical
+	# 02 4735 323F3080 9D03 - Horizontal
+	# 02 4735 373F3080 A203 - Both
+	
+	# returns [horz, vert]
+	
+	var b = pkt[3]
+	if b == 0x30
+		return [false, false]
+	elif b == 0x31
+		return [false, true]
+	elif b == 0x32
+		return [true, false]
+	else 
+		return [true, true]
+	end
+end
+
 def readOutsideTemperature(reader)
 	writePacket(reader, bytes("025261b303"))
 	var pkt = readReply(reader)
@@ -295,14 +333,19 @@ class FakeA41
 	def init()
 		var ser = serial(GPIO_RX, GPIO_TX, 2400, serial.SERIAL_8E2)
 		self.reader = SerReader(ser, 1000)
+		var version = readVersion(self.reader)
+		log("Daikin protocol version: "+str(version))
 	end
 	
 	def getState()
 		var outT = readOutsideTemperature(self.reader)
 		var inT = readInsideTemperature(self.reader)
+		var swings = readSwingState(self.reader)
 		var state = readUnitStateObj(self.reader)
 		state.insideTemp = inT
 		state.outsideTemp = outT
+		state.swingH = swings[0]
+		state.swingV = swings[1]
 		return state
 	end
 
@@ -348,7 +391,9 @@ class FakeA41Driver : Driver
 			","+"\"active\":"+str(s.active)+
 			",\"mode\":\""+s.mode+"\"" +
 			",\"temperature\":"+str(s.targetTemp) +
-			",\"fan\":\""+s.fan+"\""
+			",\"fan\":\""+s.fan+"\"" +
+			",\"swingH\":"+str(s.swingH) +
+			",\"swingV\":"+str(s.swingV)
 		tasmota.response_append(msg)
 	end
 
