@@ -17,8 +17,8 @@ GPIO_RX = 6
 GPIO_TX = 4
 
 # Home Assistant setup
-
-HA_UNIQUE_NAME = "FA41-"+tasmota.cmd("DeviceName")["DeviceName"]
+DEVICE_NAME=tasmota.cmd("DeviceName")["DeviceName"]
+HA_UNIQUE_NAME = "FA41-"+DEVICE_NAME
 HA_DISPLAY_NAME = "FA41-"+tasmota.cmd("FriendlyName")["FriendlyName1"]
 HA_TOPIC_PREFIX = "fa41/"+HA_UNIQUE_NAME+"/"
 
@@ -45,6 +45,9 @@ PRESENCE =
 '  "min_temp": 16,'
 '  "max_temp": 30,'
 '  "temp_step": 1,'
+'  "availability_topic": "tele/'+DEVICE_NAME+'/LWT",'
+'  "payload_available": "Online",'
+'  "payload_not_available": "Offline",'
 '  "fan_mode_command_topic": "'+HA_FAN_COMMAND_TOPIC+'",'
 '  "fan_mode_state_topic": "'+HA_FAN_STATE_TOPIC+'",'
 '  "mode_command_topic": "'+HA_MODE_COMMAND_TOPIC+'",'
