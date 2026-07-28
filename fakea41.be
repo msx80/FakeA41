@@ -28,6 +28,12 @@ HA_MODE_STATE_TOPIC = HA_TOPIC_PREFIX+"mode/state"
 HA_TEMP_COMMAND_TOPIC = HA_TOPIC_PREFIX+"temp/set"
 HA_TEMP_STATE_TOPIC = HA_TOPIC_PREFIX+"temp/state"
 
+HA_SWINGV_COMMAND_TOPIC = HA_TOPIC_PREFIX+"swingv/set"
+HA_SWINGV_STATE_TOPIC = HA_TOPIC_PREFIX+"swingv/state"
+
+HA_SWINGH_COMMAND_TOPIC = HA_TOPIC_PREFIX+"swingh/set"
+HA_SWINGH_STATE_TOPIC = HA_TOPIC_PREFIX+"swingh/state"
+
 HA_FAN_COMMAND_TOPIC = HA_TOPIC_PREFIX+"fan/set"
 HA_FAN_STATE_TOPIC = HA_TOPIC_PREFIX+"fan/state"
 
@@ -35,6 +41,8 @@ HA_CURRENT_TEMP_TOPIC =  HA_TOPIC_PREFIX+"currentTemp/state";
 HA_OUTSIDE_TEMP_TOPIC =  HA_TOPIC_PREFIX+"outsideTemp/state";
 
 # TODO create a single device discovery instead of multiple components
+# DONE send only the state that changed, not all topic every time
+# TODO OR create a single state topic
 
 PRESENCE = 
 '{'
@@ -54,6 +62,13 @@ PRESENCE =
 '  "mode_state_topic": "'+HA_MODE_STATE_TOPIC+'",'
 '  "temperature_command_topic": "'+HA_TEMP_COMMAND_TOPIC+'",'
 '  "temperature_state_topic": "'+HA_TEMP_STATE_TOPIC+'",'
+
+'  "swing_mode_command_topic": "'+HA_SWINGV_COMMAND_TOPIC+'",'
+'  "swing_mode_state_topic": "'+HA_SWINGV_STATE_TOPIC+'",'
+
+'  "swing_horizontal_mode_command_topic": "'+HA_SWINGH_COMMAND_TOPIC+'",'
+'  "swing_horizontal_mode_state_topic": "'+HA_SWINGH_STATE_TOPIC+'",'
+
 '  "dev": {'
 '    "ids": ["Dev'+HA_UNIQUE_NAME+'"],'
 '    "name": "Daikin '+HA_DISPLAY_NAME+'"'
@@ -461,23 +476,9 @@ class FakeA41
 		return self.lastState
 	end
 
-	# send a command to the unit.
-	# active boolean
-	# mode, fan string
-	# targetTemp number
-	# swing* boolean
-	def fullCommand(active, mode, fan, targetTemp, swingH, swingV)
-		
-		# first set the swings so if anything goes bad the state is unchanged
-		# only send if turning on, no need to set if powering down
-		if active 
-			writeSwings(self.reader, swingV, swingH)
-		end
-
-		# write the actual command
-		writeCommand(self.reader, active, mode, targetTemp, fan)
-
-			
+	
+	def swings(swingV, swingH)
+		writeSwings(self.reader, swingV, swingH)
 	end
 	
 	# send a command to the unit.
@@ -506,15 +507,7 @@ class FakeA41Driver : Driver
 		var oldState = self.fa41.lastState
 		self.fa41.getState()
 		var newState = self.fa41.lastState
-		if ( oldState.targetTemp != newState.targetTemp ) ||
-		   ( oldState.mode != newState.mode) ||
-		   ( oldState.fan != newState.fan) ||
-		   ( oldState.active != newState.active) ||
-		   ( oldState.insideTemp != newState.insideTemp) ||
-		   ( oldState.outsideTemp != newState.outsideTemp)
-		   log("Change in state detected!")
-		   self.sendState(newState)
-		end
+		self.sendChangedState(oldState, newState)
 	end
 	
 	def mqttConnected()
@@ -530,17 +523,40 @@ class FakeA41Driver : Driver
 		end
 	end
     	
+    	def sendChangedState(oldState, state)
+    		if mqtt.connected()
+    		        if oldState.mode != state.mode || oldState.active != state.active  
+    		        	mqtt.publish(HA_MODE_STATE_TOPIC, state.active ? state.mode : "off")
+    		        end
+    		        if oldState.targetTemp != state.targetTemp
+    				mqtt.publish(HA_TEMP_STATE_TOPIC, str(state.targetTemp))
+    			end
+    			if oldState.fan != state.fan
+    				mqtt.publish(HA_FAN_STATE_TOPIC, state.fan)
+    			end
+    			if oldState.insideTemp != state.insideTemp
+    				mqtt.publish(HA_CURRENT_TEMP_TOPIC, str(state.insideTemp))
+    			end
+    			if oldState.outsideTemp != state.outsideTemp
+    				mqtt.publish(HA_OUTSIDE_TEMP_TOPIC, str(state.outsideTemp))
+    			end
+    			if oldState.swingV != state.swingV
+    				mqtt.publish(HA_SWINGV_STATE_TOPIC, state.swingV ? "on" : "off")
+    			end
+    			if oldState.swingH != state.swingH
+    				mqtt.publish(HA_SWINGH_STATE_TOPIC, state.swingH ? "on" : "off")
+    			end
+    		end
+    	end
     	def sendState(state)
     		if mqtt.connected()
-    		    if state.active
-    		        mqtt.publish(HA_MODE_STATE_TOPIC, state.mode)
-    		    else
-    		        mqtt.publish(HA_MODE_STATE_TOPIC, "off")
-    		    end
+    		        mqtt.publish(HA_MODE_STATE_TOPIC, state.active ? state.mode : "off")
     			mqtt.publish(HA_TEMP_STATE_TOPIC, str(state.targetTemp))
     			mqtt.publish(HA_FAN_STATE_TOPIC, state.fan)
     			mqtt.publish(HA_CURRENT_TEMP_TOPIC, str(state.insideTemp))
     			mqtt.publish(HA_OUTSIDE_TEMP_TOPIC, str(state.outsideTemp))
+    			mqtt.publish(HA_SWINGV_STATE_TOPIC, state.swingV ? "on" : "off")
+    			mqtt.publish(HA_SWINGH_STATE_TOPIC, state.swingH ? "on" : "off")
     		end
     	end
     	
@@ -554,6 +570,18 @@ class FakeA41Driver : Driver
     	def fanSet(fanStr)
     		var s = self.fa41.lastState.clone()
     		self.fa41.command(s.active, s.mode, fanStr, s.targetTemp)
+    		return true;
+    	end
+    	
+    	def swingVSet(vv)
+    		var s = self.fa41.lastState.clone()
+    		self.fa41.swings(vv == "on", s.swingH)
+    		return true;
+    	end
+    	
+    	def swingHSet(vv)
+    		var s = self.fa41.lastState.clone()
+    		self.fa41.swings(s.swingV, vv == "on")
     		return true;
     	end
     	
@@ -580,6 +608,8 @@ class FakeA41Driver : Driver
 		mqtt.subscribe(HA_TEMP_COMMAND_TOPIC, / topic, idx, data, databytes -> self.tempSet(data) )
 		mqtt.subscribe(HA_MODE_COMMAND_TOPIC, / topic, idx, data, databytes -> self.modeSet(data) )
 		mqtt.subscribe(HA_FAN_COMMAND_TOPIC, / topic, idx, data, databytes -> self.fanSet(data) )
+		mqtt.subscribe(HA_SWINGV_COMMAND_TOPIC, / topic, idx, data, databytes -> self.swingVSet(data) )
+		mqtt.subscribe(HA_SWINGH_COMMAND_TOPIC, / topic, idx, data, databytes -> self.swingHSet(data) )
 		log("Driver init done")
 	end
 
