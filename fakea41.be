@@ -48,7 +48,7 @@ PRESENCE =
 '{'
 '  "name": "'+HA_DISPLAY_NAME+'",'
 '  "uniq_id": "'+HA_UNIQUE_NAME+'",'
-'  "modes": ["auto", "off", "cool", "heat", "dry", "fan_only"],'
+'  "modes": ["off", "cool", "heat", "dry", "fan_only"],'
 '  "fan_modes": ["AUTO", "NIGHT", "1", "2", "3", "4", "5"],'
 '  "min_temp": 16,'
 '  "max_temp": 30,'
@@ -379,7 +379,6 @@ def readFanState(reader)
     # correctly return "B" if the fan is in quiet mode.
 	writePacket(reader, bytes("025247FF03"))
 	var pkt = readReply(reader)
-
     var fan = FAN_CODES_INV[pkt[3]]
 	return fan
 end
@@ -401,7 +400,15 @@ def readUnitStateObj(reader)
 	var pkt = readReply(reader)
 	
 	var active = pkt[3] == 0x31 ? true : false
-	var mode = MODE_CODES_INV[pkt[4]]
+	# special cases: 0: Auto, Cooling 7: Auto, Heating, we consider as cool and heat
+	var mode
+	if pkt[4] == 0x30 
+	  mode = 'cool'
+	elif pkt[4] == 0x38
+	  mode = 'heat'
+	else
+	  mode = MODE_CODES_INV[pkt[4]]
+	end
 	var temperature = (pkt[5]-28)/2.0
 	
 	# this has a bug with NIGHT fan mode
@@ -526,37 +533,37 @@ class FakeA41Driver : Driver
     	def sendChangedState(oldState, state)
     		if mqtt.connected()
     		        if oldState.mode != state.mode || oldState.active != state.active  
-    		        	mqtt.publish(HA_MODE_STATE_TOPIC, state.active ? state.mode : "off")
+    		        	mqtt.publish(HA_MODE_STATE_TOPIC, state.active ? state.mode : "off", true)
     		        end
     		        if oldState.targetTemp != state.targetTemp
-    				mqtt.publish(HA_TEMP_STATE_TOPIC, str(state.targetTemp))
+    				mqtt.publish(HA_TEMP_STATE_TOPIC, str(state.targetTemp), true)
     			end
     			if oldState.fan != state.fan
-    				mqtt.publish(HA_FAN_STATE_TOPIC, state.fan)
+    				mqtt.publish(HA_FAN_STATE_TOPIC, state.fan, true)
     			end
     			if oldState.insideTemp != state.insideTemp
-    				mqtt.publish(HA_CURRENT_TEMP_TOPIC, str(state.insideTemp))
+    				mqtt.publish(HA_CURRENT_TEMP_TOPIC, str(state.insideTemp), true)
     			end
     			if oldState.outsideTemp != state.outsideTemp
-    				mqtt.publish(HA_OUTSIDE_TEMP_TOPIC, str(state.outsideTemp))
+    				mqtt.publish(HA_OUTSIDE_TEMP_TOPIC, str(state.outsideTemp), true)
     			end
     			if oldState.swingV != state.swingV
-    				mqtt.publish(HA_SWINGV_STATE_TOPIC, state.swingV ? "on" : "off")
+    				mqtt.publish(HA_SWINGV_STATE_TOPIC, state.swingV ? "on" : "off", true)
     			end
     			if oldState.swingH != state.swingH
-    				mqtt.publish(HA_SWINGH_STATE_TOPIC, state.swingH ? "on" : "off")
+    				mqtt.publish(HA_SWINGH_STATE_TOPIC, state.swingH ? "on" : "off", true)
     			end
     		end
     	end
     	def sendState(state)
     		if mqtt.connected()
-    		        mqtt.publish(HA_MODE_STATE_TOPIC, state.active ? state.mode : "off")
-    			mqtt.publish(HA_TEMP_STATE_TOPIC, str(state.targetTemp))
-    			mqtt.publish(HA_FAN_STATE_TOPIC, state.fan)
-    			mqtt.publish(HA_CURRENT_TEMP_TOPIC, str(state.insideTemp))
-    			mqtt.publish(HA_OUTSIDE_TEMP_TOPIC, str(state.outsideTemp))
-    			mqtt.publish(HA_SWINGV_STATE_TOPIC, state.swingV ? "on" : "off")
-    			mqtt.publish(HA_SWINGH_STATE_TOPIC, state.swingH ? "on" : "off")
+    		        mqtt.publish(HA_MODE_STATE_TOPIC, state.active ? state.mode : "off", true)
+    			mqtt.publish(HA_TEMP_STATE_TOPIC, str(state.targetTemp), true)
+    			mqtt.publish(HA_FAN_STATE_TOPIC, state.fan, true)
+    			mqtt.publish(HA_CURRENT_TEMP_TOPIC, str(state.insideTemp), true)
+    			mqtt.publish(HA_OUTSIDE_TEMP_TOPIC, str(state.outsideTemp), true)
+    			mqtt.publish(HA_SWINGV_STATE_TOPIC, state.swingV ? "on" : "off", true)
+    			mqtt.publish(HA_SWINGH_STATE_TOPIC, state.swingH ? "on" : "off", true)
     		end
     	end
     	
@@ -642,8 +649,10 @@ class FakeA41Driver : Driver
 end
 
 log("Daikin setup started")
-var fakeA41Driver = FakeA41Driver()
-tasmota.add_driver(fakeA41Driver)
-
-log("Daikin driver installed")
+tasmota.set_timer(5000, def() 
+  var fakeA41Driver = FakeA41Driver()
+  tasmota.add_driver(fakeA41Driver)
+  log("Daikin driver installed")
+end )
+log("Waiting 5 second for the split to start up")
 
